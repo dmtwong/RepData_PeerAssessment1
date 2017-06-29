@@ -1,25 +1,203 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
+title: "Reproducible Research: Peer Assessment by David Wong"
 output: 
   html_document:
     keep_md: true
 ---
 
 
-## Loading and preprocessing the data
+## Loading and preprocessing the dataf
 
+```
+1. Load the data (i.e. read.csv())
+2. Process/transform the data (if necessary) into a format suitable for your analysis
+```
 
+```{r}
+setwd('C:\\Users\\david\\Downloads')
+unzip("repdata_data_activity.zip", 'activity.csv')
+ds <- read.csv('activity.csv', stringsAsFactors = F) # str(ds)
+ds <- transform(ds, date_fact = as.factor(ds$date),
+                date = as.Date(date, "%Y-%m-%d") )#;
+str(ds)
+```
 
 ## What is mean total number of steps taken per day?
+```
+For this part of the assignment, we ignore the missing values in the dataset. (Missing values will be imputed later.)
+1. Calculate the total number of steps taken per day
+2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+3. Calculate and report the mean and median of the total number of steps taken per day
+```
 
+```{r}
+daily_ds <- data.frame( date = levels(ds$date_fact),
+                        tot_step =tapply(ds$steps,ds$date_fact,
+                                         function(x)sum(x, na.rm= T) ) ) #,
+str(daily_ds)
+```
+```{r, results='asis'}
+###2.Histogram of the total number of steps taken each day
+hist(daily_ds$tot_step, breaks = 20)
+abline(v= mean(daily_ds$tot_step, na.rm = T), col = "red")
+abline(v= median(daily_ds$tot_step, na.rm = T), col = "blue")
 
+dev.copy(png, file = "Plots/1_hist_daily_steps.png", width = 1200, height = 300, 
+         units = "px")
+dev.off()
+```
+```{r}
+### 3. Calculate and report the mean (and median ) of total daily steps
+daily_steps = cbind( Mean = mean(daily_ds$tot_step, na.rm = T), 
+               Median = median(daily_ds$tot_step, na.rm = T) )
+```
 
 ## What is the average daily activity pattern?
 
+```
+1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+2. Which 5-minute interval, on average across all the days in the dataset, contains maximum number of steps?
+```
 
+```{r, results='asis'}
+### 1. Make a time series plot of the 5-minute interval and the average number of steps taken, averaged across all days 
+ds$interval_fact <- as.factor(ds$interval)
+Interval_ds <- data.frame( intervals = levels(ds$interval_fact),
+                           mean_step = tapply(ds$steps, ds$interval_fact, 
+                                             function(x) mean(x, na.rm= T) ) )
+
+order_num_factor <- function(df, var){
+  #print(df); print(var)
+  factor(df[[var]], sort(as.integer(levels(df[[var]]))))
+}
+Interval_ds$intervals <- order_num_factor(Interval_ds, 'intervals')
+
+plot(levels(Interval_ds$intervals) , Interval_ds$mean_step, type = 'l' )
+dev.copy(png, file = "Plots/2_average_interval_steps.png", width = 1200, height = 300, 
+         units = "px")
+dev.off()
+```
+
+```{r}
+### 2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+ix_high <- with(Interval_ds, ( mean_step == max(mean_step) ) )
+Interval_ds[ix_high, ]# 8:35 am 
+```
 
 ## Imputing missing values
+```
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
 
+2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median
+
+total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+```
+
+```{r}
+### 1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+#install.packages(c('mice','Hmisc'));
+library(mice)
+md.pattern(ds) 
+```
+
+As the result shown only 'steps' have missing values, and there are 2304 of these 17568 observations have missing values
+
+```{r, results='hide'}
+### 2. Devise a strategy for imputing NA and 
+### 3. create a new dataset with NA filled
+### Step 2: Generates Multivariate Imputations by Chained Equations (MICE)
+library(Hmisc)
+ds_imputed <- mice(ds[, c('steps', 'interval')])
+ds_imputed <- cbind(complete(ds_imputed), date = ds$date)
+```
+
+compare with original dataset we could see above approach did fill the missing values
+```{r}
+cbind( head(ds[, -4], 20 ), head(ds_imputed$steps, 20) )
+```
+
+```{r}
+### 4. Histogram of the total number of steps taken each day after missing values are imputed
+daily_ds_imputed <- data.frame( date = levels(as.factor(ds_imputed$date)), 
+                                tot_step = tapply(ds_imputed$steps, as.factor(ds_imputed$date), 
+                                                  function(x) sum(x, na.rm= T) ) ) 
+
+hist(daily_ds_imputed$tot_step, breaks = 20)
+abline(v= mean(daily_ds_imputed$tot_step, na.rm = T), col = "red")
+abline(v= median(daily_ds_imputed$tot_step, na.rm = T), col = "blue")
+
+dev.copy(png, file = "Plots/3_hist_daily_steps_imputed.png", width = 1200, height = 300, 
+         units = "px")
+dev.off()
+
+
+cbind( Mean = mean(daily_ds_imputed$tot_step, na.rm = T), 
+       Median = median(daily_ds_imputed$tot_step, na.rm = T) )
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```
+1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+```
+
+```{r}
+## 1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+ds_imputed$ix_weekend <- factor(weekdays(ds_imputed$date) %in% c('Saturday', 'Sunday'),
+                                labels = c('weekday', 'weekend') )
+table(ds_imputed$ix_weekend)
+
+```
+
+
+```{r}
+# split the dataset into two 
+str(daily_ds_imputed)
+ds_imputed_weekend <- ds_imputed[ds_imputed$ix_weekend == 'weekend', ]
+ds_imputed_weekday <- ds_imputed[ds_imputed$ix_weekend == 'weekday', ]
+
+Interval_weekday <- data.frame( intervals = levels(as.factor(ds_imputed_weekday$interval)) ,
+                                avg_step = tapply(ds_imputed_weekday$steps, as.factor( ds_imputed_weekday$interval ), 
+                                             function(x) mean(x, na.rm= T) ) )
+
+Interval_weekend <- data.frame( intervals = levels( as.factor(ds_imputed_weekend$interval) ),
+                                avg_step = tapply(ds_imputed_weekend$steps, as.factor( ds_imputed_weekend$interval ), 
+                                                  function(x) mean(x, na.rm= T) ) )
+
+summary(ds_imputed_weekend); summary(ds_imputed_weekday)
+
+#par(mar = c(5,5,2,5)) 
+Interval_weekday$intervals <- order_num_factor(Interval_weekday, 'intervals')
+Interval_weekend$intervals <- order_num_factor(Interval_weekend, 'intervals')
+
+# table(Interval_weekend$intervals)
+
+par( mfrow  = c(2,1 ) )
+with(Interval_weekday, plot(intervals, avg_step, type="l", col="red",
+          cex=0.2, ylab='steps',
+          ylim = range(c(0, 300) ),
+          main = '  average number of steps taken per 5-minute interval across weekdays  ') )
+
+#par(new = T) #on same graphic device
+with(Interval_weekend, plot(intervals, avg_step, type="l", col="blue", #axes = F,
+                            cex=0.2, ylab="", xlab="",
+                            ylim = range(c(0, 300) ),
+                            main = '  average number of steps taken per 5-minute interval across weekends  ') )
+par( mfrow  = c(1,1 ) )
+
+dev.copy(png, file = "Plots/4_time_series_interval_imputed.png", width = 1200, height = 800, 
+         units = "px")
+dev.off()
+
+setwd('C:\\Users\\david\\version-control\\PeerAssignment1\\RepData_PeerAssessment1')
+```
+
